@@ -69,14 +69,15 @@ export interface EfsArgs {
    * }
    * ```
    */
-  vpc:
-  | Vpc
-  | Input<{
-    /**
-     * A list of subnet IDs in the VPC to create the EFS mount targets in.
-     */
-    subnets: Input<Input<string>[]>;
-  }>;
+  vpc: Input<
+    | Vpc
+    | {
+        /**
+         * A list of subnet IDs in the VPC to create the EFS mount targets in.
+         */
+        subnets: Input<Input<string>[]>;
+      }
+  >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -140,6 +141,20 @@ interface EfsRef {
  * ```
  *
  * Mounted at `/mnt/efs` in the container.
+ *
+ * ---
+ *
+ * ### Cost
+ *
+ * By default this component uses _Regional (Multi-AZ) with Elastic Throughput_. The pricing is
+ * pay-per-use.
+ *
+ * - For storage: $0.30 per GB per month
+ * - For reads: $0.03 per GB per month
+ * - For writes: $0.06 per GB per month
+ *
+ * The above are rough estimates for _us-east-1_, check out the
+ * [EFS pricing](https://aws.amazon.com/efs/pricing/) for more details.
  */
 export class Efs extends Component {
   private _fileSystem: Output<efs.FileSystem>;
@@ -174,15 +189,17 @@ export class Efs extends Component {
     this._accessPoint = waited.accessPoint;
 
     function normalizeVpc() {
-      // "vpc" is a Vpc component
-      if (args.vpc instanceof Vpc) {
-        return output({
-          subnets: args.vpc.privateSubnets,
-        });
-      }
+      return output(args.vpc).apply((vpc) => {
+        // "vpc" is a Vpc component
+        if (vpc instanceof Vpc) {
+          return output({
+            subnets: vpc.privateSubnets,
+          });
+        }
 
-      // "vpc" is object
-      return output(args.vpc);
+        // "vpc" is object
+        return vpc;
+      });
     }
 
     function createFileSystem() {
@@ -280,6 +297,7 @@ export class Efs extends Component {
    *
    * @param name The name of the component.
    * @param fileSystemID The ID of the existing EFS file system.
+   * @param opts? Resource options.
    *
    * @example
    * Imagine you create a EFS file system in the `dev` stage. And in your personal stage
@@ -301,14 +319,25 @@ export class Efs extends Component {
    * };
    * ```
    */
-  public static get(name: string, fileSystemID: Input<string>) {
-    const fileSystem = efs.FileSystem.get(`${name}FileSystem`, fileSystemID);
+  public static get(
+    name: string,
+    fileSystemID: Input<string>,
+    opts?: ComponentResourceOptions,
+  ) {
+    const fileSystem = efs.FileSystem.get(
+      `${name}FileSystem`,
+      fileSystemID,
+      undefined,
+      opts,
+    );
     const accessPointId = efs
-      .getAccessPointsOutput({ fileSystemId: fileSystem.id })
+      .getAccessPointsOutput({ fileSystemId: fileSystem.id }, opts)
       .apply((accessPoints) => accessPoints.ids[0]);
     const accessPoint = efs.AccessPoint.get(
       `${name}AccessPoint`,
       accessPointId,
+      undefined,
+      opts,
     );
     return new Efs(name, {
       ref: true,

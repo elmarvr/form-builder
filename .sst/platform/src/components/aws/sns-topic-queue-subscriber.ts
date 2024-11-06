@@ -6,8 +6,8 @@ import {
 } from "@pulumi/pulumi";
 import { Component, transform } from "../component";
 import { SnsTopicSubscriberArgs } from "./sns-topic";
-import { parseQueueArn } from "./helpers/arn";
-import { iam, sns, sqs } from "@pulumi/aws";
+import { sns, sqs } from "@pulumi/aws";
+import { Queue } from "./queue";
 
 export interface Args extends SnsTopicSubscriberArgs {
   /**
@@ -22,7 +22,14 @@ export interface Args extends SnsTopicSubscriberArgs {
   /**
    * The ARN of the SQS Queue.
    */
-  queue: Input<string>;
+  queue: Input<string | Queue>;
+  /**
+   * In early versions of SST, parent were forgotten to be set for resources in components.
+   * This flag is used to disable the automatic setting of the parent to prevent breaking
+   * changes.
+   * @internal
+   */
+  disableParent?: boolean;
 }
 
 /**
@@ -42,8 +49,11 @@ export class SnsTopicQueueSubscriber extends Component {
   constructor(name: string, args: Args, opts?: ComponentResourceOptions) {
     super(__pulumiType, name, args, opts);
 
-    const queueArn = output(args.queue);
+    const self = this;
     const topic = output(args.topic);
+    const queueArn = output(args.queue).apply((queue) =>
+      queue instanceof Queue ? queue.arn : output(queue),
+    );
     const policy = createPolicy();
     const subscription = createSubscription();
 
@@ -51,29 +61,8 @@ export class SnsTopicQueueSubscriber extends Component {
     this.subscription = subscription;
 
     function createPolicy() {
-      return new sqs.QueuePolicy(`${name}Policy`, {
-        queueUrl: queueArn.apply((arn) => parseQueueArn(arn).queueUrl),
-        policy: iam.getPolicyDocumentOutput({
-          statements: [
-            {
-              actions: ["sqs:SendMessage"],
-              resources: [queueArn],
-              principals: [
-                {
-                  type: "Service",
-                  identifiers: ["sns.amazonaws.com"],
-                },
-              ],
-              conditions: [
-                {
-                  test: "ArnEquals",
-                  variable: "aws:SourceArn",
-                  values: [topic.arn],
-                },
-              ],
-            },
-          ],
-        }).json,
+      return Queue.createPolicy(`${name}Policy`, queueArn, {
+        parent: args.disableParent ? undefined : self,
       });
     }
 
@@ -88,7 +77,7 @@ export class SnsTopicQueueSubscriber extends Component {
             endpoint: queueArn,
             filterPolicy: args.filter && jsonStringify(args.filter),
           },
-          {},
+          { parent: args.disableParent ? undefined : self },
         ),
       );
     }

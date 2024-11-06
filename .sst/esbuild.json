@@ -1,7 +1,27 @@
 
-  .sst/platform/sst.config.1730301943653.mjs ─ 959b ── 100.0%
-   ├ eval.ts ───────────────────────────────── 216b ─── 22.5%
-   ├ sst.config.ts ─────────────────────────── 213b ─── 22.2%
+  .sst/platform/sst.config.1730935423872.mjs ─── 18.9kb ─ 100.0%
+   ├ .sst/platform/src/components/component.ts ─ 13.5kb ── 71.4%
+   │  └ .sst/platform/src/components/linkable.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/linkable.ts ─── 2.6kb ── 14.0%
+   │  └ .sst/platform/src/components/index.ts
+   │     └ sst.config.ts
+   │        └ eval.ts
+   ├ .sst/platform/src/components/naming.ts ───── 884b ──── 4.6%
+   │  └ .sst/platform/src/components/component.ts
+   │     └ .sst/platform/src/components/linkable.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.config.ts
+   │              └ eval.ts
+   ├ sst.config.ts ────────────────────────────── 849b ──── 4.4%
    │  └ eval.ts
-   └ <define:$input> ────────────────────────── 45b ──── 4.7%
+   ├ eval.ts ──────────────────────────────────── 216b ──── 1.1%
+   ├ .sst/platform/src/components/error.ts ────── 107b ──── 0.6%
+   │  └ .sst/platform/src/components/link.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.config.ts
+   │           └ eval.ts
+   └ <define:$input> ───────────────────────────── 49b ──── 0.3%
       └ eval.ts

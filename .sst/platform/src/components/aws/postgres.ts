@@ -3,8 +3,8 @@ import {
   ComponentResourceOptions,
   interpolate,
   jsonStringify,
-  output,
   Output,
+  output,
 } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
@@ -113,7 +113,7 @@ export interface PostgresArgs {
    * }
    * ```
    */
-  proxy?: Input<true>;
+  proxy?: Input<boolean>;
   /**
    * @internal
    */
@@ -144,14 +144,15 @@ export interface PostgresArgs {
    * }
    * ```
    */
-  vpc:
+  vpc: Input<
     | Vpc
-    | Input<{
+    | {
         /**
          * A list of subnet IDs in the VPC.
          */
         subnets: Input<Input<string>[]>;
-      }>;
+      }
+  >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -186,8 +187,7 @@ export interface PostgresGetArgs {
 interface PostgresRef {
   ref: boolean;
   instance: rds.Instance;
-  password: Output<string>;
-  proxy: Output<rds.Proxy | undefined>;
+  proxyId?: Input<string>;
 }
 
 /**
@@ -229,6 +229,29 @@ interface PostgresRef {
  * });
  * await client.connect();
  * ```
+ *
+ * ---
+ *
+ * ### Cost
+ *
+ * By default this component uses a _Single-AZ Deployment_, _On-Demand DB Instances_ of a
+ * `db.t4g.micro` at $0.016 per hour. And 20GB of _General Purpose gp3 Storage_
+ * at $0.115 per GB per month.
+ *
+ * That works out to $0.016 x 24 x 30 + $0.115 x 20 or **$14 per month**. Adjust this for the
+ * `instance` type and the `storage` you are using.
+ *
+ * The above are rough estimates for _us-east-1_, check out the
+ * [RDS for PostgreSQL pricing](https://aws.amazon.com/rds/postgresql/pricing/#On-Demand_DB_Instances_costs) for more details.
+ *
+ * #### RDS Proxy
+ *
+ * If you enable the `proxy`, it uses _Provisioned instances_ with 2 vCPUs at $0.015 per hour.
+ *
+ * That works out to an **additional** $0.015 x 2 x 24 x 30 or **$22 per month**.
+ *
+ * The above are rough estimates for _us-east-1_, check out the
+ * [RDS Proxy pricing](https://aws.amazon.com/rds/proxy/pricing/) for more details.
  */
 export class Postgres extends Component implements Link.Linkable {
   private instance: rds.Instance;
@@ -253,15 +276,38 @@ export class Postgres extends Component implements Link.Linkable {
       ].join("\n"),
     });
 
+    const parent = this;
+
     if (args && "ref" in args) {
       const ref = args as unknown as PostgresRef;
+
+      const proxy = ref.proxyId
+        ? rds.Proxy.get(`${name}Proxy`, ref.proxyId, undefined, { parent })
+        : undefined;
+
+      const secret = ref.instance.tags.apply((tags) =>
+        tags?.["sst:lookup:password"]
+          ? secretsmanager.getSecretVersionOutput(
+              {
+                secretId: tags["sst:lookup:password"],
+              },
+              { parent },
+            )
+          : output(undefined),
+      );
+      const password = secret.apply((v) => {
+        if (!v) {
+          throw new VisibleError(
+            `Failed to get password for Postgres ${name}.`,
+          );
+        }
+        return JSON.parse(v.secretString).password as string;
+      });
       this.instance = ref.instance;
-      this._password = ref.password;
-      this.proxy = output(ref.proxy);
+      this._password = password;
+      this.proxy = output(proxy);
       return;
     }
-
-    const parent = this;
 
     const engineVersion = output(args.version).apply((v) => v ?? "16.4");
     const instanceType = output(args.instance).apply((v) => v ?? "t4g.micro");
@@ -285,35 +331,39 @@ export class Postgres extends Component implements Link.Linkable {
     function normalizeStorage() {
       return output(args.storage ?? "20 GB").apply((v) => {
         const size = toGBs(v);
-        if (size < 20)
+        if (size < 20) {
           throw new VisibleError(
             `Storage must be at least 20 GB for the ${name} Postgres database.`,
           );
-        if (size > 65536)
+        }
+        if (size > 65536) {
           throw new VisibleError(
             `Storage cannot be greater than 65536 GB (64 TB) for the ${name} Postgres database.`,
           );
+        }
         return size;
       });
     }
 
     function normalizeVpc() {
-      // "vpc" is a Vpc.v1 component
-      if (args.vpc instanceof VpcV1) {
-        throw new VisibleError(
-          `You are using the "Vpc.v1" component. Please migrate to the latest "Vpc" component.`,
-        );
-      }
+      return output(args.vpc).apply((vpc) => {
+        // "vpc" is a Vpc.v1 component
+        if (vpc instanceof VpcV1) {
+          throw new VisibleError(
+            `You are using the "Vpc.v1" component. Please migrate to the latest "Vpc" component.`,
+          );
+        }
 
-      // "vpc" is a Vpc component
-      if (args.vpc instanceof Vpc) {
-        return {
-          subnets: args.vpc.privateSubnets,
-        };
-      }
+        // "vpc" is a Vpc component
+        if (vpc instanceof Vpc) {
+          return {
+            subnets: vpc.privateSubnets,
+          };
+        }
 
-      // "vpc" is object
-      return output(args.vpc);
+        // "vpc" is object
+        return vpc;
+      });
     }
 
     function createSubnetGroup() {
@@ -410,6 +460,7 @@ export class Postgres extends Component implements Link.Linkable {
             backupRetentionPeriod: 7,
             performanceInsightsEnabled: true,
             tags: {
+              "sst:component-version": _version.toString(),
               "sst:lookup:password": secret.id,
             },
           },
@@ -528,10 +579,11 @@ export class Postgres extends Component implements Link.Linkable {
    */
   public get proxyId() {
     return this.proxy.apply((v) => {
-      if (!v)
+      if (!v) {
         throw new VisibleError(
           `Proxy is not enabled. Enable it with "proxy: true".`,
         );
+      }
       return v.id;
     });
   }
@@ -599,6 +651,7 @@ export class Postgres extends Component implements Link.Linkable {
    *
    * @param name The name of the component.
    * @param args The arguments to get the Postgres database.
+   * @param opts? Resource options.
    *
    * @example
    * Imagine you create a database in the `dev` stage. And in your personal stage `frank`,
@@ -626,32 +679,28 @@ export class Postgres extends Component implements Link.Linkable {
    * };
    * ```
    */
-  public static get(name: string, args: PostgresGetArgs) {
-    const instance = rds.Instance.get(`${name}Instance`, args.id);
-    const proxy = args.proxyId
-      ? rds.Proxy.get(`${name}Proxy`, args.proxyId)
-      : undefined;
-
-    // get secret
-    const secret = instance.tags.apply((tags) =>
-      tags?.["sst:lookup:password"]
-        ? secretsmanager.getSecretVersionOutput({
-            secretId: tags["sst:lookup:password"],
-          })
-        : output(undefined),
+  public static get(
+    name: string,
+    args: PostgresGetArgs,
+    opts?: ComponentResourceOptions,
+  ) {
+    const instance = rds.Instance.get(
+      `${name}Instance`,
+      args.id,
+      undefined,
+      opts,
     );
-    const password = secret.apply((v) => {
-      if (!v)
-        throw new VisibleError(`Failed to get password for Postgres ${name}.`);
-      return JSON.parse(v.secretString).password as string;
+    return instance.tags.apply((tags) => {
+      // override version
+      $cli.state.version[name] = tags?.["sst:component-version"]
+        ? parseInt(tags["sst:component-version"])
+        : $cli.state.version[name];
+      return new Postgres(name, {
+        ref: true,
+        instance,
+        proxyId: args.proxyId,
+      } as unknown as PostgresArgs);
     });
-
-    return new Postgres(name, {
-      ref: true,
-      instance,
-      password,
-      proxy,
-    } as unknown as PostgresArgs);
   }
 }
 

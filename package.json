@@ -2,6 +2,10 @@
   "name": "form-builder",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "db:generate": "sst shell -- bun run --filter @form-builder/db db:generate",
+    "db:migrate": "sst shell -- bun run --filter @form-builder/db db:migrate"
+  },
   "devDependencies": {
     "bun-types": "latest"
   },
@@ -10,5 +14,8 @@
   },
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "sst": "^3.3.4"
+  }
 }

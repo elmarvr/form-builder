@@ -235,7 +235,7 @@ export interface CognitoUserPoolArgs {
   /**
    * Enable software token MFA for the User Pool.
    *
-   * @default Software token MFA is disabled.
+   * @default `false`
    * @example
    *
    * ```ts
@@ -244,7 +244,7 @@ export interface CognitoUserPoolArgs {
    * }
    * ```
    */
-  softwareToken?: Input<true>;
+  softwareToken?: Input<boolean>;
   /**
    * Configure triggers for this User Pool
    * @default No triggers
@@ -543,9 +543,11 @@ export class CognitoUserPool extends Component implements Link.Linkable {
             ),
             smsAuthenticationMessage: args.smsAuthenticationMessage,
             smsConfiguration: args.sms,
-            softwareTokenMfaConfiguration: args.softwareToken && {
-              enabled: true,
-            },
+            softwareTokenMfaConfiguration: output(args.softwareToken).apply(
+              (v) => ({
+                enabled: v ?? false,
+              }),
+            ),
             lambdaConfig:
               triggers &&
               triggers.apply((triggers) => {
@@ -649,6 +651,7 @@ export class CognitoUserPool extends Component implements Link.Linkable {
    *
    * @param name Name of the client.
    * @param args Configure the client.
+   * @param opts? Resource options.
    *
    * @example
    *
@@ -777,8 +780,17 @@ export class CognitoUserPool extends Component implements Link.Linkable {
    * };
    * ```
    */
-  public static get(name: string, userPoolID: Input<string>) {
-    const userPool = cognito.UserPool.get(`${name}UserPool`, userPoolID);
+  public static get(
+    name: string,
+    userPoolID: Input<string>,
+    opts?: ComponentResourceOptions,
+  ) {
+    const userPool = cognito.UserPool.get(
+      `${name}UserPool`,
+      userPoolID,
+      undefined,
+      opts,
+    );
     return new CognitoUserPool(name, {
       ref: true,
       userPool,

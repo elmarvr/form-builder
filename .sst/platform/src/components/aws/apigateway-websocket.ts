@@ -62,13 +62,13 @@ export interface ApiGatewayWebSocketArgs {
    */
   domain?: Input<string | Prettify<ApiGatewayV2DomainArgs>>;
   /**
-   * Configure the [API Gateway logs](https://docs.aws.amazon.com/apigateway/latest/developerguide/view-cloudwatch-log-events-in-cloudwatch-console.html) in CloudWatch. By default, access logs are enabled and kept forever.
-   * @default `{retention: "forever"}`
+   * Configure the [API Gateway logs](https://docs.aws.amazon.com/apigateway/latest/developerguide/view-cloudwatch-log-events-in-cloudwatch-console.html) in CloudWatch. By default, access logs are enabled and kept for 1 month.
+   * @default `{retention: "1 month"}`
    * @example
    * ```js
    * {
    *   accessLog: {
-   *     retention: "1 week"
+   *     retention: "forever"
    *   }
    * }
    * ```
@@ -76,7 +76,7 @@ export interface ApiGatewayWebSocketArgs {
   accessLog?: Input<{
     /**
      * The duration the API Gateway logs are kept in CloudWatch.
-     * @default `forever`
+     * @default `1 month`
      */
     retention?: Input<keyof typeof RETENTION>;
   }>;
@@ -153,9 +153,11 @@ export interface ApiGatewayWebSocketRouteArgs {
    */
   auth?: Input<{
     /**
-     * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
+     * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need
+     * to use Signature Version 4 to sign their requests with their AWS credentials.
+     * @default `false`
      */
-    iam?: Input<true>;
+    iam?: Input<boolean>;
   }>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -174,7 +176,8 @@ export interface ApiGatewayWebSocketRouteArgs {
 }
 
 /**
- * The `ApiGatewayWebSocket` component lets you add an [Amazon API Gateway WebSocket API](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api.html) to your app.
+ * The `ApiGatewayWebSocket` component lets you add an [Amazon API Gateway WebSocket API](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api.html)
+ * to your app.
  *
  * @example
  *
@@ -249,7 +252,7 @@ export class ApiGatewayWebSocket extends Component implements Link.Linkable {
     function normalizeAccessLog() {
       return output(args.accessLog).apply((accessLog) => ({
         ...accessLog,
-        retention: accessLog?.retention ?? "forever",
+        retention: accessLog?.retention ?? "1 month",
       }));
     }
 

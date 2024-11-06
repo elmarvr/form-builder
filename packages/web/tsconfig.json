@@ -8,6 +8,7 @@
     "moduleResolution": "Bundler",
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true,
+    "baseUrl": ".",
     "paths": {
       "~/*": ["./src/*"]
     }

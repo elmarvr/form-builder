@@ -7,24 +7,11 @@ import {
 } from "@pulumi/pulumi";
 import { Component, transform } from "../component";
 import { Function, FunctionArgs } from "./function";
-import { BusSubscriberArgs } from "./bus";
+import { BusBaseSubscriberArgs, createRule } from "./bus-base-subscriber";
 import { cloudwatch, lambda } from "@pulumi/aws";
 import { FunctionBuilder, functionBuilder } from "./helpers/function-builder";
 
-export interface Args extends BusSubscriberArgs {
-  /**
-   * The bus to use.
-   */
-  bus: Input<{
-    /**
-     * The ARN of the bus.
-     */
-    arn: Input<string>;
-    /**
-     * The name of the bus.
-     */
-    name: Input<string>;
-  }>;
+export interface Args extends BusBaseSubscriberArgs {
   /**
    * The subscriber function.
    */
@@ -52,7 +39,7 @@ export class BusLambdaSubscriber extends Component {
 
     const self = this;
     const bus = output(args.bus);
-    const rule = createRule();
+    const rule = createRule(name, bus.name, args, self);
     const fn = createFunction();
     const permission = createPermission();
     const target = createTarget();
@@ -87,30 +74,6 @@ export class BusLambdaSubscriber extends Component {
       );
     }
 
-    function createRule() {
-      return new cloudwatch.EventRule(
-        ...transform(
-          args?.transform?.rule,
-          `${name}Rule`,
-          {
-            eventBusName: bus.name,
-            eventPattern: args.pattern
-              ? output(args.pattern).apply((pattern) =>
-                  JSON.stringify({
-                    "detail-type": pattern.detailType,
-                    source: pattern.source,
-                    detail: pattern.detail,
-                  }),
-                )
-              : JSON.stringify({
-                  source: [{ prefix: "" }],
-                }),
-          },
-          { parent: self },
-        ),
-      );
-    }
-
     function createTarget() {
       return new cloudwatch.EventTarget(
         ...transform(
@@ -131,11 +94,14 @@ export class BusLambdaSubscriber extends Component {
    * The underlying [resources](/docs/components/#nodes) this component creates.
    */
   public get nodes() {
+    const self = this;
     return {
       /**
        * The Lambda function that'll be notified.
        */
-      function: this.fn.apply((fn) => fn.getFunction()),
+      get function() {
+        return self.fn.apply((fn) => fn.getFunction());
+      },
       /**
        * The Lambda permission.
        */

@@ -8,6 +8,8 @@ import { parseEventBusArn } from "./helpers/arn";
 import { BusLambdaSubscriber } from "./bus-lambda-subscriber";
 import { cloudwatch } from "@pulumi/aws";
 import { permission } from "./permission";
+import { Queue } from "./queue";
+import { BusQueueSubscriber } from "./bus-queue-subscriber";
 
 export interface BusArgs {
   /**
@@ -218,19 +220,20 @@ export class Bus extends Component implements Link.Linkable {
   /**
    * Subscribe to this EventBus.
    *
+   * @param name The name of the subscription.
    * @param subscriber The function that'll be notified.
    * @param args Configure the subscription.
    *
    * @example
    *
    * ```js
-   * bus.subscribe("src/subscriber.handler");
+   * bus.subscribe("MySubscription", "src/subscriber.handler");
    * ```
    *
    * Add a pattern to the subscription.
    *
    * ```js
-   * bus.subscribe("src/subscriber.handler", {
+   * bus.subscribe("MySubscription", "src/subscriber.handler", {
    *   pattern: {
    *     source: ["my.source", "my.source2"],
    *     price_usd: [{numeric: [">=", 100]}]
@@ -241,7 +244,7 @@ export class Bus extends Component implements Link.Linkable {
    * Customize the subscriber function.
    *
    * ```js
-   * bus.subscribe({
+   * bus.subscribe("MySubscription", {
    *   handler: "src/subscriber.handler",
    *   timeout: "60 seconds"
    * });
@@ -254,11 +257,13 @@ export class Bus extends Component implements Link.Linkable {
    * ```
    */
   public subscribe(
+    name: string,
     subscriber: Input<string | FunctionArgs | FunctionArn>,
     args: BusSubscriberArgs = {},
   ) {
     return Bus._subscribeFunction(
       this.constructorName,
+      name,
       this.nodes.bus.name,
       this.nodes.bus.arn,
       subscriber,
@@ -270,6 +275,7 @@ export class Bus extends Component implements Link.Linkable {
   /**
    * Subscribe to an EventBus that was not created in your app.
    *
+   * @param name The name of the subscription.
    * @param busArn The ARN of the EventBus to subscribe to.
    * @param subscriber The function that'll be notified.
    * @param args Configure the subscription.
@@ -285,13 +291,13 @@ export class Bus extends Component implements Link.Linkable {
    * You can subscribe to it by passing in the ARN.
    *
    * ```js
-   * sst.aws.Bus.subscribe(busArn, "src/subscriber.handler");
+   * sst.aws.Bus.subscribe("MySubscription", busArn, "src/subscriber.handler");
    * ```
    *
    * Add a pattern to the subscription.
    *
    * ```js
-   * sst.aws.Bus.subscribe(busArn, "src/subscriber.handler", {
+   * sst.aws.Bus.subscribe("MySubscription", busArn, "src/subscriber.handler", {
    *   pattern: {
    *     price_usd: [{numeric: [">=", 100]}]
    *   }
@@ -301,13 +307,14 @@ export class Bus extends Component implements Link.Linkable {
    * Customize the subscriber function.
    *
    * ```js
-   * sst.aws.Bus.subscribe(busArn, {
+   * sst.aws.Bus.subscribe("MySubscription", busArn, {
    *   handler: "src/subscriber.handler",
    *   timeout: "60 seconds"
    * });
    * ```
    */
   public static subscribe(
+    name: string,
     busArn: Input<string>,
     subscriber: Input<string | FunctionArgs | FunctionArn>,
     args?: BusSubscriberArgs,
@@ -315,7 +322,8 @@ export class Bus extends Component implements Link.Linkable {
     return output(busArn).apply((busArn) => {
       const busName = parseEventBusArn(busArn).busName;
       return this._subscribeFunction(
-        logicalName(busName),
+        busName,
+        name,
         busName,
         busArn,
         subscriber,
@@ -326,26 +334,16 @@ export class Bus extends Component implements Link.Linkable {
 
   private static _subscribeFunction(
     name: string,
+    subscriberName: string,
     busName: Input<string>,
     busArn: string | Output<string>,
     subscriber: Input<string | FunctionArgs | FunctionArn>,
     args: BusSubscriberArgs = {},
     opts: ComponentResourceOptions = {},
   ) {
-    return all([subscriber, args]).apply(([subscriber, args]) => {
-      const suffix = logicalName(
-        hashStringToPrettyString(
-          [
-            typeof busArn === "string" ? busArn : outputId,
-            JSON.stringify(args.pattern ?? {}),
-            typeof subscriber === "string" ? subscriber : subscriber.handler,
-          ].join(""),
-          6,
-        ),
-      );
-
+    return output(args).apply((args) => {
       return new BusLambdaSubscriber(
-        `${name}Subscriber${suffix}`,
+        `${name}Subscriber${subscriberName}`,
         {
           bus: { name: busName, arn: busArn },
           subscriber,
@@ -353,6 +351,114 @@ export class Bus extends Component implements Link.Linkable {
         },
         opts,
       );
+    });
+  }
+
+  /**
+   * Subscribe to this EventBus with an SQS Queue.
+   *
+   * @param name The name of the subscription.
+   * @param queue The ARN of the queue or `Queue` component that'll be notified.
+   * @param args Configure the subscription.
+   *
+   * @example
+   *
+   * For example, let's say you have a queue.
+   *
+   * ```js title="sst.config.ts"
+   * const queue = sst.aws.Queue("MyQueue");
+   * ```
+   *
+   * You can subscribe to this bus with it.
+   *
+   * ```js title="sst.config.ts"
+   * bus.subscribeQueue(queue);
+   * ```
+   *
+   * Add a filter to the subscription.
+   *
+   * ```js title="sst.config.ts"
+   * bus.subscribeQueue(queue, {
+   *   filter: {
+   *     price_usd: [{numeric: [">=", 100]}]
+   *   }
+   * });
+   * ```
+   */
+  public subscribeQueue(
+    name: string,
+    queue: Input<string | Queue>,
+    args: BusSubscriberArgs = {},
+  ) {
+    return Bus._subscribeQueue(
+      this.constructorName,
+      name,
+      this.nodes.bus.arn,
+      this.nodes.bus.name,
+      queue,
+      args,
+    );
+  }
+
+  /**
+   * Subscribe to an existing EventBus with a previously created SQS Queue.
+   *
+   * @param name The name of the subscription.
+   * @param busArn The ARN of the EventBus to subscribe to.
+   * @param queue The ARN of the queue or `Queue` component that'll be notified.
+   * @param args Configure the subscription.
+   *
+   * @example
+   *
+   * For example, let's say you have an existing EventBus and SQS Queue with the following ARNs.
+   *
+   * ```js title="sst.config.ts"
+   * const busArn = "arn:aws:events:us-east-1:123456789012:event-bus/MyBus";
+   * const queueArn = "arn:aws:sqs:us-east-1:123456789012:MyQueue";
+   * ```
+   *
+   * You can subscribe to the bus with the queue.
+   *
+   * ```js title="sst.config.ts"
+   * sst.aws.Bus.subscribeQueue(busArn, queueArn);
+   * ```
+   *
+   * Add a filter to the subscription.
+   *
+   * ```js title="sst.config.ts"
+   * sst.aws.Bus.subscribeQueue(busArn, queueArn, {
+   *   filter: {
+   *     price_usd: [{numeric: [">=", 100]}]
+   *   }
+   * });
+   * ```
+   */
+  public static subscribeQueue(
+    name: string,
+    busArn: Input<string>,
+    queue: Input<string | Queue>,
+    args?: BusSubscriberArgs,
+  ) {
+    return output(busArn).apply((busArn) => {
+      const busName = parseEventBusArn(busArn).busName;
+      return this._subscribeQueue(busName, name, busArn, busName, queue, args);
+    });
+  }
+
+  private static _subscribeQueue(
+    name: string,
+    subscriberName: string,
+    busArn: Input<string>,
+    busName: Input<string>,
+    queue: Input<string | Queue>,
+    args: BusSubscriberArgs = {},
+  ) {
+    return output(args).apply((args) => {
+      return new BusQueueSubscriber(`${name}Subscriber${subscriberName}`, {
+        bus: { name: busName, arn: busArn },
+        queue,
+        ...args,
+      });
     });
   }
 

@@ -26,6 +26,7 @@ import {
   toSeconds,
 } from "../duration";
 import { ApiGatewayV2PrivateRoute } from "./apigatewayv2-private-route";
+import { Vpc } from "./vpc";
 
 interface ApiGatewayV2CorsArgs {
   /**
@@ -202,13 +203,13 @@ export interface ApiGatewayV2Args {
    */
   cors?: Input<boolean | Prettify<ApiGatewayV2CorsArgs>>;
   /**
-   * Configure the [API Gateway logs](https://docs.aws.amazon.com/apigateway/latest/developerguide/view-cloudwatch-log-events-in-cloudwatch-console.html) in CloudWatch. By default, access logs are enabled and kept forever.
-   * @default `{retention: "forever"}`
+   * Configure the [API Gateway logs](https://docs.aws.amazon.com/apigateway/latest/developerguide/view-cloudwatch-log-events-in-cloudwatch-console.html) in CloudWatch. By default, access logs are enabled and kept for 1 month.
+   * @default `{retention: "1 month"}`
    * @example
    * ```js
    * {
    *   accessLog: {
-   *     retention: "1 week"
+   *     retention: "forever"
    *   }
    * }
    * ```
@@ -216,7 +217,7 @@ export interface ApiGatewayV2Args {
   accessLog?: Input<{
     /**
      * The duration the API Gateway logs are kept in CloudWatch.
-     * @default `forever`
+     * @default `1 month`
      */
     retention?: Input<keyof typeof RETENTION>;
   }>;
@@ -225,25 +226,44 @@ export interface ApiGatewayV2Args {
    * This creates a VPC link for your HTTP API.
    *
    * @example
+   * Create a `Vpc` component.
+   *
+   * ```js title="sst.config.ts"
+   * const myVpc = new sst.aws.Vpc("MyVpc");
+   * ```
+   *
+   * And pass it in. The VPC link will be placed in the public subnets.
+   *
+   * ```js
+   * {
+   *   vpc: myVpc
+   * }
+   * ```
+   *
+   * The above is equivalent to:
+   *
    * ```js
    * {
    *   vpc: {
-   *     securityGroups: ["sg-0399348378a4c256c"],
-   *     subnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"]
+   *     securityGroups: myVpc.securityGroups,
+   *     subnets: myVpc.publicSubnets
    *   }
    * }
    * ```
    */
-  vpc?: Input<{
-    /**
-     * A list of VPC security group IDs.
-     */
-    securityGroups: Input<Input<string>[]>;
-    /**
-     * A list of VPC subnet IDs.
-     */
-    subnets: Input<Input<string>[]>;
-  }>;
+  vpc?: Input<
+    | Vpc
+    | {
+        /**
+         * A list of VPC security group IDs.
+         */
+        securityGroups: Input<Input<string>[]>;
+        /**
+         * A list of VPC subnet IDs.
+         */
+        subnets: Input<Input<string>[]>;
+      }
+  >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -505,7 +525,7 @@ export interface ApiGatewayV2RouteArgs {
         /**
          * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
          */
-        iam?: Input<true>;
+        iam?: Input<boolean>;
         /**
          * Enable JWT or JSON Web Token authorization for a given API route. When JWT auth is enabled, clients need to include a valid JWT in their requests.
          *
@@ -667,6 +687,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     const accessLog = normalizeAccessLog();
     const domain = normalizeDomain();
     const cors = normalizeCors();
+    const vpc = normalizeVpc();
 
     const vpcLink = createVpcLink();
     const api = createApi();
@@ -694,7 +715,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     function normalizeAccessLog() {
       return output(args.accessLog).apply((accessLog) => ({
         ...accessLog,
-        retention: accessLog?.retention ?? "forever",
+        retention: accessLog?.retention ?? "1 month",
       }));
     }
 
@@ -749,16 +770,34 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       });
     }
 
-    function createVpcLink() {
+    function normalizeVpc() {
+      // "vpc" is undefined
       if (!args.vpc) return;
+
+      return output(args.vpc).apply((vpc) => {
+        // "vpc" is a Vpc component
+        if (vpc instanceof Vpc) {
+          return {
+            subnets: vpc.publicSubnets,
+            securityGroups: vpc.securityGroups,
+          };
+        }
+
+        // "vpc" is object
+        return vpc;
+      });
+    }
+
+    function createVpcLink() {
+      if (!vpc) return;
 
       return new apigatewayv2.VpcLink(
         ...transform(
           args.transform?.vpcLink,
           `${name}VpcLink`,
           {
-            securityGroupIds: output(args.vpc).securityGroups,
-            subnetIds: output(args.vpc).subnets,
+            securityGroupIds: vpc.securityGroups,
+            subnetIds: vpc.subnets,
           },
           { parent },
         ),
@@ -1178,7 +1217,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    */
   public routePrivate(
     rawRoute: string,
-    arn: string,
+    arn: Input<string>,
     args: ApiGatewayV2RouteArgs = {},
   ) {
     if (!this.vpcLink)
