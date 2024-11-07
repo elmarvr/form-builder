@@ -4,11 +4,9 @@ import { Resource } from "sst";
 export default defineConfig({
   schema: "./src/schema.ts",
   out: "./migrations",
-  dialect: "sqlite",
-  driver: "d1-http",
+  dialect: "turso",
   dbCredentials: {
-    accountId: Resource.Drizzle.accountId,
-    databaseId: Resource.Drizzle.databaseId,
-    token: Resource.Drizzle.token,
+    url: Resource.TursoUrl.value,
+    authToken: Resource.TursoAuthToken.value,
   },
 });

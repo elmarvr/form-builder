@@ -1,16 +1,24 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { Linkable } from "./.sst/platform/src/components";
-
 export default $config({
   app(input) {
     return {
-      name: "form-builder",
+      name: "sst-form",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
     };
   },
   async run() {
+    const tursoUrl = new sst.Secret("TursoUrl", "");
+    const tursoAuthToken = new sst.Secret("TursoAuthToken", "");
+
+    const drizzle = new sst.Linkable("Drizzle", {
+      properties: {
+        url: tursoUrl,
+        authToken: tursoAuthToken,
+      },
+    });
+
     const web = new sst.aws.StaticSite("Web", {
       path: "packages/web",
       build: {
@@ -19,26 +27,10 @@ export default $config({
       },
     });
 
-    const d1 = new sst.cloudflare.D1("D1", {});
-
-    const api = new sst.cloudflare.Worker("Api", {
-      link: [d1],
-      handler: "packages/api/src/index.ts",
+    const api = new sst.aws.Function("Api", {
+      link: [drizzle],
+      handler: "packages/api/src/index.handler",
       url: true,
     });
-
-    const drizzle = new Linkable("Drizzle", {
-      properties: {
-        accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
-        token: process.env.CLOUDFLARE_API_TOKEN!,
-        databaseId: d1.id,
-      },
-    });
-
-    return {
-      Db: d1.id,
-      Api: api.url,
-      Web: web.url,
-    };
   },
 });

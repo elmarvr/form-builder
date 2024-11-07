@@ -2,6 +2,9 @@
   "name": "@form-builder/api",
   "module": "index.ts",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "devDependencies": {
     "bun-types": "latest"
   },
@@ -9,6 +12,9 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "hono": "^4.6.9"
+    "@form-builder/db": "workspace:*",
+    "@hono/zod-validator": "^0.4.1",
+    "hono": "^4.6.9",
+    "zod": "^3.23.8"
   }
 }

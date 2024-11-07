@@ -7,6 +7,8 @@
     "db:migrate": "sst shell -- bun run --filter @form-builder/db db:migrate"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "4.20241106.0",
+    "@types/aws-lambda": "8.10.145",
     "bun-types": "latest"
   },
   "peerDependencies": {
@@ -16,6 +18,6 @@
     "packages/*"
   ],
   "dependencies": {
-    "sst": "^3.3.4"
+    "sst": "3.3.5"
   }
 }

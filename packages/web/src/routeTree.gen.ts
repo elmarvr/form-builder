@@ -12,12 +12,19 @@
 
 import { Route as rootRoute } from './routes/__root'
 import { Route as IndexImport } from './routes/index'
+import { Route as FormFormIdImport } from './routes/form.$formId'
 
 // Create/Update Routes
 
 const IndexRoute = IndexImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const FormFormIdRoute = FormFormIdImport.update({
+  id: '/form/$formId',
+  path: '/form/$formId',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -32,6 +39,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexImport
       parentRoute: typeof rootRoute
     }
+    '/form/$formId': {
+      id: '/form/$formId'
+      path: '/form/$formId'
+      fullPath: '/form/$formId'
+      preLoaderRoute: typeof FormFormIdImport
+      parentRoute: typeof rootRoute
+    }
   }
 }
 
@@ -39,32 +53,37 @@ declare module '@tanstack/react-router' {
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/form/$formId': typeof FormFormIdRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/form/$formId': typeof FormFormIdRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
   '/': typeof IndexRoute
+  '/form/$formId': typeof FormFormIdRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/form/$formId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/form/$formId'
+  id: '__root__' | '/' | '/form/$formId'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FormFormIdRoute: typeof FormFormIdRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FormFormIdRoute: FormFormIdRoute,
 }
 
 export const routeTree = rootRoute
@@ -77,11 +96,15 @@ export const routeTree = rootRoute
     "__root__": {
       "filePath": "__root.tsx",
       "children": [
-        "/"
+        "/",
+        "/form/$formId"
       ]
     },
     "/": {
       "filePath": "index.tsx"
+    },
+    "/form/$formId": {
+      "filePath": "form.$formId.tsx"
     }
   }
 }

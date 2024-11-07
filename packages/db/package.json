@@ -2,6 +2,9 @@
   "name": "@form-builder/db",
   "module": "index.ts",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
@@ -14,6 +17,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "drizzle-orm": "^0.36.1",
     "sst": "^3.3.4"

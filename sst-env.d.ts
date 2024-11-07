@@ -4,20 +4,34 @@
 /* deno-fmt-ignore-file */
 import "sst"
 export {}
+import "sst"
 declare module "sst" {
   export interface Resource {
     "Api": {
-      "type": "sst.cloudflare.Worker"
+      "name": string
+      "type": "sst.aws.Function"
       "url": string
     }
-    "D1": {
-      "type": "sst.cloudflare.D1"
-    }
     "Drizzle": {
-      "accountId": string
-      "databaseId": string
-      "token": string
+      "authToken": {
+        "4dabf18193072939515e22adb298388d": string
+        "packageVersion": string
+        "urn": string
+      }
       "type": "sst.sst.Linkable"
+      "url": {
+        "4dabf18193072939515e22adb298388d": string
+        "packageVersion": string
+        "urn": string
+      }
+    }
+    "TursoAuthToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "TursoUrl": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "Web": {
       "type": "sst.aws.StaticSite"
